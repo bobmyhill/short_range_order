@@ -16,6 +16,7 @@ from skimage.restoration import inpaint_biharmonic
 from skimage import img_as_float
 import plotly.graph_objects as go
 from scipy.interpolate import splprep, splev
+from scipy.interpolate import RegularGridInterpolator
 
 
 def make_transparent(img, white_thresh=0.95):
@@ -1481,14 +1482,35 @@ helmholtz = energies - tt * entropies
 m = 2.0
 mean_field_fraction = 0.25
 
+if False:
+    # Interpolation (this method does not work)
+    interpz = RegularGridInterpolator(
+        (temperatures, compositions), entropies, method="linear"
+    )
+    interpc = RegularGridInterpolator(
+        (temperatures, compositions), orders, method="linear"
+    )
+
+    xnew = np.linspace(compositions.min(), compositions.max(), 100)
+    ynew = np.linspace(temperatures.min(), temperatures.max(), 100)
+    xxnew, yynew = np.meshgrid(xnew, ynew)
+    points = np.stack((yynew.ravel(), xxnew.ravel()), axis=-1)
+    zznew = interpz(points).reshape(100, 100)
+    ccnew = interpc(points).reshape(100, 100)
+else:
+    zznew = entropies
+    xxnew = tt
+    yynew = cc
+    ccnew = orders
+
 # 3D figure
 fig = go.Figure(
     data=[
         go.Surface(
-            z=entropies,
-            x=cc,
-            y=tt,
-            surfacecolor=orders,
+            z=zznew,
+            x=xxnew,
+            y=yynew,
+            surfacecolor=ccnew,
             colorscale="Viridis",
             colorbar=dict(title="disorder"),
         )
