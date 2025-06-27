@@ -1048,7 +1048,7 @@ if True:
         return energy, entropy, sol.x[0], sol
 
 
-if False:
+if True:
     mff = 0.22  # 0.22 works well for AB
     # mean_field_fractions = [0., 0.25, 0.5, 0.75, 1.-1.e-3]
     mean_field_fractions = [mff]
@@ -1150,12 +1150,13 @@ if False:
         energies = np.empty_like(temperatures)
         orders = np.empty_like(temperatures)
         for d, mean_field_fraction in enumerate(mean_field_fractions):
+            model.mu_guess = np.array([0.0] * 5)
             for i, T in enumerate(temperatures):
                 print(i, T)
                 sol = energy_entropy_order_equilibrated_at_CT(
                     0.5, T, mean_field_fraction, model
                 )
-                if sol[3] is True:
+                if sol[3].success or sol[3].status == 2:
                     energies[i] = sol[0]
                     entropies[i] = sol[1]
                     orders[i] = sol[2]
@@ -1233,7 +1234,7 @@ if False:
 
     plt.show()
 
-if False:
+if True:
     # Disordered at 0.75
     mff = 0.25  # 0.25 works well for A3B
     temperatures = np.linspace(0.1, 0.01, 101)
@@ -1305,12 +1306,13 @@ if False:
     energies = np.empty_like(temperatures)
     orders = np.empty_like(temperatures)
 
+    model.mu_guess = np.array([0.0] * 5)
     for i, T in enumerate(temperatures):
         print(i, T)
         sol = energy_entropy_order_equilibrated_at_CT(
             0.25, T, mean_field_fraction, model
         )
-        if sol[3] is True:
+        if sol[3].success or sol[3].status == 2:
             energies[i] = sol[0]
             entropies[i] = sol[1]
             orders[i] = sol[2]
