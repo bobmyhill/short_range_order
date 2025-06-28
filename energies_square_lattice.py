@@ -9,7 +9,21 @@ import sympy as sp
 from burnman.utils.reductions import independent_row_indices
 from scipy.optimize import root
 import matplotlib.image as mpimg
-from matplotlib.lines import Line2D
+from ising_square_lattice_exact import helmholtz_energy_square_lattice
+from energies_FCC import energy_entropy_order_equilibrated_at_CT
+from energies_FCC import helmholtz_at_OCT, site_fractions_from_cf
+
+def make_transparent(img, white_thresh=0.95):
+    if img.shape[2] == 3:  # No alpha channel yet
+        alpha = np.ones((img.shape[0], img.shape[1]))
+        white_mask = np.all(img > white_thresh, axis=-1)
+        alpha[white_mask] = 0  # Make white pixels transparent
+        img = np.dstack((img, alpha))
+    else:
+        white_mask = np.all(img[:, :, :3] > white_thresh, axis=-1)
+        img[:, :, 3][white_mask] = 0
+
+    return img
 
 
 cmap = cm.cividis
@@ -515,14 +529,16 @@ n_species = 2
 # Symmetric interaction matrix for 2 species
 interaction_matrix = np.array(
     [
-        [0, -1],
-        [-1, 0],
+        [0., -1., 0., -1.],
+        [-1., 0., -1., 0.],
+        [0., -1., 0., -1.],
+        [-1., 0., -1., 0.],
     ]
 )
 
 # 1) Simple cluster as part of infinite matrix
 # Allowed species on each site
-site_species = [[0, 1]] * 4
+site_species = [[0, 1], [2, 3], [0, 1], [2, 3]]
 
 # Bonds between sites, including half-bonds to other clusters
 bonds = np.array([[0, 1], [1, 2], [2, 3], [3, 0]])
@@ -573,17 +589,22 @@ fig.set_layout_engine("tight")
 plt.show()
 
 
-mean_field_fractions = [0.0, 0.25, 0.5, 0.75, 1.0 - 1.0e-3]
-# mean_field_fractions = [0.25]
-fs = [0.01, 0.1, 0.2, 0.3, 0.4, 0.5]
-fs = [0.5]
+mean_field_fractions = [0.125]
+fs = [0.001, 0.2, 0.4, 0.6, 0.8, 1.]
+#fs = [0.5]
 
-temperatures = np.linspace(0.4, 0.01, 10001)
+
+temperatures = np.linspace(0.6, 0.01, 10001)
 
 fig = plt.figure(figsize=(10, 8))
 ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
 
-for b, (model, m, ls) in enumerate([(model1, 1.0, "--"), (model2, 2.0, "-")]):
+img = mpimg.imread("figures/Dubacq_2022_Fig_8b.png")
+ax[0].imshow(make_transparent(img), extent=[0, 2.2, 0., 25], aspect='auto')
+
+
+# for b, (model, m, ls) in enumerate([(model1, 1.0, "--"), (model2, 2.0, "-")]):
+for b, (model, m, ls) in enumerate([(model2, 2.0, "-")]):
     c = -1
     for f in fs:
         model.mu_guess = np.array([0.0] * 5)
@@ -593,7 +614,7 @@ for b, (model, m, ls) in enumerate([(model1, 1.0, "--"), (model2, 2.0, "-")]):
             print(
                 f"LRO fraction: {np.abs(2.*f - 1.)}, mean field fraction: {mean_field_fraction}"
             )
-            site_fractions = np.array([f, 1.0 - f, 1.0 - f, f, f, 1.0 - f, 1.0 - f, f])
+            site_fractions = site_fractions_from_cf(0.5, f)
 
             reduced_independent_cluster_fractions = model.independent_cluster_fractions(
                 site_fractions
@@ -647,6 +668,40 @@ for b, (model, m, ls) in enumerate([(model1, 1.0, "--"), (model2, 2.0, "-")]):
                 c=colour[c],
                 linestyle=ls,
             )
+
+
+temperatures_short = np.linspace(0.6, 0.06, 101)
+energies = np.empty_like(temperatures_short)
+entropies = np.empty_like(temperatures_short)
+orders = np.empty_like(temperatures_short)
+
+for f in [0.25, 0.30, 0.35, 0.4, 0.45, 0.5]:
+    model2.mu_guess = ([-10.]*5)
+    for i, T in enumerate(temperatures_short):
+        print(T)
+        try:
+            E, S, O, sol, p = energy_entropy_order_equilibrated_at_CT(f, T, mean_field_fractions[0], model2)
+        except:
+            model2.mu_guess = ([-10.]*5)
+            E, S, O, sol, p = energy_entropy_order_equilibrated_at_CT(f, T, mean_field_fractions[0], model2)
+
+        energies[i] = E
+        entropies[i] = S
+        orders[i] = O
+
+    ax[0].plot(R*temperatures_short, entropies/m, c="black")
+    ax[1].plot(R*temperatures_short, energies/m, c="black")
+    ax[3].plot(R*temperatures_short, (energies - temperatures_short*entropies)/m, c="black")
+
+
+
+
+F_short = 4.*np.array([helmholtz_energy_square_lattice(T, 0.5) for T in temperatures_short]) - 4.
+S_short = -np.gradient(F_short, temperatures_short, edge_order=2)
+E_short = F_short + temperatures_short * S_short
+ax[0].plot(R*temperatures_short, S_short, c="black", linestyle=":")
+ax[1].plot(R*temperatures_short, E_short, c="black", linestyle=":")
+ax[3].plot(R*temperatures_short, F_short, c="black", linestyle=":")
 
 
 ax[0].set_ylim(

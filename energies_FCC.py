@@ -698,922 +698,953 @@ class CSA(Cluster):
         self.mu_guess = np.zeros(len(self.independent_cluster_occupancies)) - 8.0
 
 
-if True:
-    temperatures = np.linspace(1.8, 0.02, 100)
-    energies = np.zeros_like(temperatures)
-    entropies = np.zeros_like(temperatures)
-    cluster_entropies = np.zeros_like(temperatures)
+def site_fractions_from_cf(c, f):
+    cT = c * 4.0
+    if cT >= 3.0:
+        cR = cT - 3.0
+        site_fractions_o = np.array([1.0 - cR, cR, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
+    elif cT >= 2.0:
+        cR = cT - 2.0
+        site_fractions_o = np.array([1.0 - cR, cR, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0])
+    elif cT >= 1.0:
+        cR = cT - 1.0
+        site_fractions_o = np.array([1.0 - cR, cR, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0])
+    else:
+        site_fractions_o = np.array([1.0 - cT, cT, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
+    site_fractions_d = np.array([1.0 - c, c] * 4)
 
-    # Load the image
-    img1 = mpimg.imread("figures/Oates_et_al_1999_Figure_2.png")
-    img2 = mpimg.imread("figures/Ferreira_et_al_2018_Figure_1a.png")
-    img3 = mpimg.imread("figures/Jindal_et_al_2014_Figure_5.png")
-    img4 = mpimg.imread("figures/Jindal_et_al_2014_Figure_6.png")
+    site_fractions = (1.0 - f) * site_fractions_o + f * site_fractions_d
+    return site_fractions
 
-    # Define the plot
-    fig = plt.figure(figsize=(10, 8))
-    ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
 
-    ax[0].fill_between(
-        [0.0, 1.8],
-        [np.log(6) / 4.0, np.log(6) / 4.0],
-        [np.log(16) / 4.0, np.log(16) / 4.0],
-        alpha=0.1,
-        color="red",
-        label="range of cluster entropies",
+def helmholtz_at_OCT(farr, c, T, mean_field_fraction, model):
+    site_fractions = site_fractions_from_cf(c, farr[0])
+
+    reduced_independent_cluster_fractions = model.independent_cluster_fractions(
+        site_fractions
+    )
+    mu_independent_clusters = model.mu(
+        T, reduced_independent_cluster_fractions, mean_field_fraction
     )
 
-    # Show the image with specified bounds
-    ax[0].imshow(img1, extent=[0.6, 1.2, 0.0, 0.6], aspect="auto")
-    ax[1].imshow(img2, extent=[0.6, 1.4, -4.25, -3], aspect="auto")
-    ax[2].imshow(img2, extent=[0.6, 1.4, -4.25, -3], aspect="auto")
-
-    mean_field_fraction = 0.0
-    n = 4.0
-
-    for gamma in [1.0, 1.22]:
-
-        WAB = -R / gamma
-        alpha = beta = 0.0
-        model = CSA(WAB, alpha, beta)
-
-        for i, T in enumerate(temperatures):
-
-            f = 0.5
-            site_fractions = np.array([f, 1.0 - f, 1.0 - f, f, f, 1.0 - f, 1.0 - f, f])
-
-            independent_cluster_fractions = model.independent_cluster_fractions(
-                site_fractions
-            )
-            mu_independent_clusters = model.mu(
-                T, independent_cluster_fractions, mean_field_fraction
-            )
-
-            E_clusters = effective_cluster_energies(
-                model,
-                independent_cluster_fractions,
-                mean_field_fraction,
-            )
-
-            p = cluster_probabilities(
-                mu_independent_clusters,
-                T,
-                E_clusters,
-                model.clusters_as_independent_cluster_fractions,
-            )
-
-            point_entropy = -R * np.sum(site_fractions * np.log(site_fractions))
-            cluster_entropy = -R * np.sum(p * np.log(p))
-
-            entropies[i] = (
-                float(gamma) * cluster_entropy
-                - (float(gamma) - 1.0 / float(n)) * point_entropy
-            )
-            cluster_entropies[i] = cluster_entropy / float(n)
-
-            energies[i] = gamma * np.sum(p.dot(E_clusters))
-
-        mask = temperatures > 0.9
-        ln = ax[0].plot(temperatures, entropies / R, linestyle=":")
-        ax[0].plot(
-            temperatures[mask],
-            entropies[mask] / R,
-            c=ln[0].get_color(),
-            label=f"total, $\\gamma = {{{gamma}}}$",
-        )
-        ax[0].plot(
-            temperatures,
-            cluster_entropies / R,
-            c=ln[0].get_color(),
-            linestyle="--",
-            label=f"cluster-only, $\\gamma = {{{gamma}}}$",
-        )
-        ax[0].plot(
-            temperatures,
-            np.log(16)
-            / (np.log(16.0) - np.log(6))
-            * (cluster_entropies / R - np.log(6) / 4.0),
-            c=ln[0].get_color(),
-            linestyle=":",
-            label=f"scaled cluster-only, $\\gamma = {{{gamma}}}$",
-        )
-
-        helmholtz = energies - temperatures * entropies
-        ax[1].plot(temperatures, energies / R, c=ln[0].get_color())
-        ax[2].plot(temperatures, helmholtz / R, c=ln[0].get_color())
-
-        ax[2].plot(temperatures, -3.0 - temperatures * np.log(2), linestyle=":")
-
-    custom_handles = [
-        Line2D(
-            [],
-            [],
-            marker="d",
-            color="black",
-            linestyle="None",
-            markersize=8,
-            label="MC",
-        ),
-        Line2D(
-            [],
-            [],
-            marker="^",
-            markerfacecolor="none",
-            color="black",
-            linestyle="None",
-            markersize=8,
-            label="CVM",
-        ),
-        Line2D(
-            [],
-            [],
-            marker="x",
-            color="black",
-            linestyle="None",
-            markersize=8,
-            label="CSA, $\\gamma = 1$",
-        ),
-        Line2D(
-            [],
-            [],
-            marker="o",
-            markerfacecolor="none",
-            markeredgecolor="black",
-            linestyle="None",
-            markersize=8,
-            label="CSA, $\\gamma = 1.22$",
-        ),
-    ]
-
-    # Add the legend
-    handles, labels = ax[0].get_legend_handles_labels()
-    all_handles = custom_handles + handles
-    all_labels = [h.get_label() for h in custom_handles] + labels
-
-    ax[0].legend(all_handles, all_labels, frameon=True, fontsize=8)
-
-    ax[0].set_xlim(
-        0.0,
-    )
-    ax[0].set_ylim(0.0, 0.7)
-    plt.show()
-
-    fig = plt.figure(figsize=(10, 4))
-    ax = [fig.add_subplot(1, 2, i) for i in range(1, 3)]
-
-    # Number of species
-    n_species = 2
-
-    # Symmetric interaction matrix for 2 species
-    interaction_matrix = np.array(
-        [
-            [0, -1],
-            [-1, 0],
-        ]
+    E_clusters = effective_cluster_energies(
+        model,
+        reduced_independent_cluster_fractions,
+        mean_field_fraction,
     )
 
-    # 1) Simple cluster as part of infinite matrix
-    # Allowed species on each site
-    site_species = [[0, 1]] * 4
-
-    # Bonds between sites, including half-bonds to other clusters
-    bonds = np.array([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
-
-    # Multiplicity of bonds of each type
-    n_bonds = np.array([2.0, 2.0, 2.0, 2.0, 2.0, 2.0])
-
-    model1 = SingleCluster(site_species, bonds, n_bonds, interaction_matrix)
-    model1.print_clusters()
-    model1.energy_histogram(ax[0])
-
-    # Allowed species on each site
-    site_species = [[0, 1]] * 8
-
-    # Bonds between sites, including half-bonds outside the current cluster
-    bonds = np.array(
-        [
-            [0, 1],
-            [0, 2],
-            [0, 3],
-            [1, 2],
-            [1, 3],
-            [2, 3],
-            [0, 5],
-            [0, 6],
-            [0, 7],
-            [1, 4],
-            [1, 6],
-            [1, 7],
-            [2, 4],
-            [2, 5],
-            [2, 7],
-            [3, 4],
-            [3, 5],
-            [3, 6],
-        ]
+    p = cluster_probabilities(
+        mu_independent_clusters,
+        T,
+        E_clusters,
+        model.clusters_as_independent_cluster_fractions,
     )
 
-    # Multiplicity of bonds of each type
-    n_bonds = np.array(
-        [
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-        ]
+    entropy = -R * np.sum(p * np.log(p))
+    energy = p.dot(E_clusters)
+
+    return energy - T * entropy
+
+
+def energy_entropy_order_equilibrated_at_CT(
+    c, T, mean_field_fraction, model, f_guess=0.001
+):
+    sol = minimize(
+        helmholtz_at_OCT,
+        [f_guess],
+        args=(c, T, mean_field_fraction, model),
+        bounds=[(0.0001, 1.0)],
+        tol=1.0e-5,
+        method="Nelder-Mead",
+        options={"maxiter": 500},
     )
-
-    model2 = DoubleEmbeddedCluster(site_species, bonds, n_bonds, interaction_matrix)
-    model2.print_clusters()
-    model2.energy_histogram(ax[1])
-
-    ax[0].set_title("Single cluster")
-    ax[1].set_title("Embedded double cluster")
-
-    ax[0].set_xlim(-10, 2)
-    ax[1].set_xlim(-20, 4)
-
-    fig.set_layout_engine("tight")
-    plt.show()
-
-if True:
-
-    def site_fractions_from_cf(c, f):
-        cT = c * 4.0
-        if cT >= 3.0:
-            cR = cT - 3.0
-            site_fractions_o = np.array([1.0 - cR, cR, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
-        elif cT >= 2.0:
-            cR = cT - 2.0
-            site_fractions_o = np.array([1.0 - cR, cR, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0])
-        elif cT >= 1.0:
-            cR = cT - 1.0
-            site_fractions_o = np.array([1.0 - cR, cR, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0])
-        else:
-            site_fractions_o = np.array([1.0 - cT, cT, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
-        site_fractions_d = np.array([1.0 - c, c] * 4)
-
-        site_fractions = (1.0 - f) * site_fractions_o + f * site_fractions_d
-        return site_fractions
-
-    def helmholtz_at_OCT(farr, c, T, mean_field_fraction, model):
-        site_fractions = site_fractions_from_cf(c, farr[0])
-
-        reduced_independent_cluster_fractions = model.independent_cluster_fractions(
-            site_fractions
-        )
-        mu_independent_clusters = model.mu(
-            T, reduced_independent_cluster_fractions, mean_field_fraction
-        )
-
-        E_clusters = effective_cluster_energies(
-            model,
-            reduced_independent_cluster_fractions,
-            mean_field_fraction,
-        )
-
-        p = cluster_probabilities(
-            mu_independent_clusters,
-            T,
-            E_clusters,
-            model.clusters_as_independent_cluster_fractions,
-        )
-
-        entropy = -R * np.sum(p * np.log(p))
-        energy = p.dot(E_clusters)
-
-        return energy - T * entropy
-
-    def energy_entropy_order_equilibrated_at_CT(
-        c, T, mean_field_fraction, model, f_guess=0.001
-    ):
+    if not sol.success and sol.message != 2:
         sol = minimize(
             helmholtz_at_OCT,
             [f_guess],
             args=(c, T, mean_field_fraction, model),
             bounds=[(0.0001, 1.0)],
             tol=1.0e-5,
-            method="Nelder-Mead",
             options={"maxiter": 500},
         )
-        if not sol.success and sol.message != 2:
-            sol = minimize(
-                helmholtz_at_OCT,
-                [f_guess],
-                args=(c, T, mean_field_fraction, model),
-                bounds=[(0.0001, 1.0)],
-                tol=1.0e-5,
-                options={"maxiter": 500},
-            )
 
-        site_fractions = site_fractions_from_cf(c, sol.x[0])
+    site_fractions = site_fractions_from_cf(c, sol.x[0])
 
-        reduced_independent_cluster_fractions = model.independent_cluster_fractions(
-            site_fractions
-        )
-        mu_independent_clusters = model.mu(
-            T, reduced_independent_cluster_fractions, mean_field_fraction
-        )
-
-        E_clusters = effective_cluster_energies(
-            model,
-            reduced_independent_cluster_fractions,
-            mean_field_fraction,
-        )
-
-        p = cluster_probabilities(
-            mu_independent_clusters,
-            T,
-            E_clusters,
-            model.clusters_as_independent_cluster_fractions,
-        )
-
-        entropy = -R * np.sum(p * np.log(p))
-        energy = p.dot(E_clusters)
-
-        return energy, entropy, sol.x[0], sol
-
-
-if True:
-    mff = 0.22  # 0.22 works well for AB
-    # mean_field_fractions = [0., 0.25, 0.5, 0.75, 1.-1.e-3]
-    mean_field_fractions = [mff]
-    fs = np.linspace(1.0e-6, 0.5, 6)
-    models = [model1, model2]
-    models = [model2]
-    #  fs = [0.5]
-
-    temperatures = np.linspace(0.10, 0.01, 101)
-
-    fig = plt.figure(figsize=(10, 8))
-    ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
-
-    ax[0].imshow(img1, extent=[0.6 / 2.0, 1.2 / 2.0, 0.0, 0.6 * 4.0 * R], aspect="auto")
-    ax[1].imshow(img3, extent=[1.5 / 4.0, 2.5 / 4.0, -8.0, -7.0], aspect="auto")
-    ax[3].imshow(
-        img2, extent=[0.6 / 2.0, 1.4 / 2.0, -4.25 * 2.0, -3 * 2.0], aspect="auto"
+    reduced_independent_cluster_fractions = model.independent_cluster_fractions(
+        site_fractions
+    )
+    mu_independent_clusters = model.mu(
+        T, reduced_independent_cluster_fractions, mean_field_fraction
     )
 
-    for b, model in enumerate(models):
+    E_clusters = effective_cluster_energies(
+        model,
+        reduced_independent_cluster_fractions,
+        mean_field_fraction,
+    )
 
-        m = 1.0
-        ls = "--"
+    p = cluster_probabilities(
+        mu_independent_clusters,
+        T,
+        E_clusters,
+        model.clusters_as_independent_cluster_fractions,
+    )
 
-        if model == model2:
-            m = 2.0
-            ls = "-"
+    entropy = -R * np.sum(p * np.log(p))
+    energy = p.dot(E_clusters)
 
-        c = -1
-        for f in fs:
-            model.mu_guess = np.array([0.0] * 5)
+    return energy, entropy, sol.x[0], sol, p
 
+
+if __name__ == "__main__":
+    if True:
+        temperatures = np.linspace(1.8, 0.02, 100)
+        energies = np.zeros_like(temperatures)
+        entropies = np.zeros_like(temperatures)
+        cluster_entropies = np.zeros_like(temperatures)
+
+        # Load the image
+        img1 = mpimg.imread("figures/Oates_et_al_1999_Figure_2.png")
+        img2 = mpimg.imread("figures/Ferreira_et_al_2018_Figure_1a.png")
+        img3 = mpimg.imread("figures/Jindal_et_al_2014_Figure_5.png")
+        img4 = mpimg.imread("figures/Jindal_et_al_2014_Figure_6.png")
+
+        # Define the plot
+        fig = plt.figure(figsize=(10, 8))
+        ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
+
+        ax[0].fill_between(
+            [0.0, 1.8],
+            [np.log(6) / 4.0, np.log(6) / 4.0],
+            [np.log(16) / 4.0, np.log(16) / 4.0],
+            alpha=0.1,
+            color="red",
+            label="range of cluster entropies",
+        )
+
+        # Show the image with specified bounds
+        ax[0].imshow(img1, extent=[0.6, 1.2, 0.0, 0.6], aspect="auto")
+        ax[1].imshow(img2, extent=[0.6, 1.4, -4.25, -3], aspect="auto")
+        ax[2].imshow(img2, extent=[0.6, 1.4, -4.25, -3], aspect="auto")
+
+        mean_field_fraction = 0.0
+        n = 4.0
+
+        for gamma in [1.0, 1.22]:
+
+            WAB = -R / gamma
+            alpha = beta = 0.0
+            model = CSA(WAB, alpha, beta)
+
+            for i, T in enumerate(temperatures):
+
+                f = 0.5
+                site_fractions = np.array([f, 1.0 - f, 1.0 - f, f, f, 1.0 - f, 1.0 - f, f])
+
+                independent_cluster_fractions = model.independent_cluster_fractions(
+                    site_fractions
+                )
+                mu_independent_clusters = model.mu(
+                    T, independent_cluster_fractions, mean_field_fraction
+                )
+
+                E_clusters = effective_cluster_energies(
+                    model,
+                    independent_cluster_fractions,
+                    mean_field_fraction,
+                )
+
+                p = cluster_probabilities(
+                    mu_independent_clusters,
+                    T,
+                    E_clusters,
+                    model.clusters_as_independent_cluster_fractions,
+                )
+
+                point_entropy = -R * np.sum(site_fractions * np.log(site_fractions))
+                cluster_entropy = -R * np.sum(p * np.log(p))
+
+                entropies[i] = (
+                    float(gamma) * cluster_entropy
+                    - (float(gamma) - 1.0 / float(n)) * point_entropy
+                )
+                cluster_entropies[i] = cluster_entropy / float(n)
+
+                energies[i] = gamma * np.sum(p.dot(E_clusters))
+
+            mask = temperatures > 0.9
+            ln = ax[0].plot(temperatures, entropies / R, linestyle=":")
+            ax[0].plot(
+                temperatures[mask],
+                entropies[mask] / R,
+                c=ln[0].get_color(),
+                label=f"total, $\\gamma = {{{gamma}}}$",
+            )
+            ax[0].plot(
+                temperatures,
+                cluster_entropies / R,
+                c=ln[0].get_color(),
+                linestyle="--",
+                label=f"cluster-only, $\\gamma = {{{gamma}}}$",
+            )
+            ax[0].plot(
+                temperatures,
+                np.log(16)
+                / (np.log(16.0) - np.log(6))
+                * (cluster_entropies / R - np.log(6) / 4.0),
+                c=ln[0].get_color(),
+                linestyle=":",
+                label=f"scaled cluster-only, $\\gamma = {{{gamma}}}$",
+            )
+
+            helmholtz = energies - temperatures * entropies
+            ax[1].plot(temperatures, energies / R, c=ln[0].get_color())
+            ax[2].plot(temperatures, helmholtz / R, c=ln[0].get_color())
+
+            ax[2].plot(temperatures, -3.0 - temperatures * np.log(2), linestyle=":")
+
+        custom_handles = [
+            Line2D(
+                [],
+                [],
+                marker="d",
+                color="black",
+                linestyle="None",
+                markersize=8,
+                label="MC",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="^",
+                markerfacecolor="none",
+                color="black",
+                linestyle="None",
+                markersize=8,
+                label="CVM",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="x",
+                color="black",
+                linestyle="None",
+                markersize=8,
+                label="CSA, $\\gamma = 1$",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="o",
+                markerfacecolor="none",
+                markeredgecolor="black",
+                linestyle="None",
+                markersize=8,
+                label="CSA, $\\gamma = 1.22$",
+            ),
+        ]
+
+        # Add the legend
+        handles, labels = ax[0].get_legend_handles_labels()
+        all_handles = custom_handles + handles
+        all_labels = [h.get_label() for h in custom_handles] + labels
+
+        ax[0].legend(all_handles, all_labels, frameon=True, fontsize=8)
+
+        ax[0].set_xlim(
+            0.0,
+        )
+        ax[0].set_ylim(0.0, 0.7)
+        plt.show()
+
+        fig = plt.figure(figsize=(10, 4))
+        ax = [fig.add_subplot(1, 2, i) for i in range(1, 3)]
+
+        # Number of species
+        n_species = 2
+
+        # Symmetric interaction matrix for 2 species
+        interaction_matrix = np.array(
+            [
+                [0, -1],
+                [-1, 0],
+            ]
+        )
+
+        # 1) Simple cluster as part of infinite matrix
+        # Allowed species on each site
+        site_species = [[0, 1]] * 4
+
+        # Bonds between sites, including half-bonds to other clusters
+        bonds = np.array([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
+
+        # Multiplicity of bonds of each type
+        n_bonds = np.array([2.0, 2.0, 2.0, 2.0, 2.0, 2.0])
+
+        model1 = SingleCluster(site_species, bonds, n_bonds, interaction_matrix)
+        model1.print_clusters()
+        model1.energy_histogram(ax[0])
+
+        # Allowed species on each site
+        site_species = [[0, 1]] * 8
+
+        # Bonds between sites, including half-bonds outside the current cluster
+        bonds = np.array(
+            [
+                [0, 1],
+                [0, 2],
+                [0, 3],
+                [1, 2],
+                [1, 3],
+                [2, 3],
+                [0, 5],
+                [0, 6],
+                [0, 7],
+                [1, 4],
+                [1, 6],
+                [1, 7],
+                [2, 4],
+                [2, 5],
+                [2, 7],
+                [3, 4],
+                [3, 5],
+                [3, 6],
+            ]
+        )
+
+        # Multiplicity of bonds of each type
+        n_bonds = np.array(
+            [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+            ]
+        )
+
+        model2 = DoubleEmbeddedCluster(site_species, bonds, n_bonds, interaction_matrix)
+        model2.print_clusters()
+        model2.energy_histogram(ax[1])
+
+        ax[0].set_title("Single cluster")
+        ax[1].set_title("Embedded double cluster")
+
+        ax[0].set_xlim(-10, 2)
+        ax[1].set_xlim(-20, 4)
+
+        fig.set_layout_engine("tight")
+        plt.show()
+
+
+    if True:
+        mff = 0.22  # 0.22 works well for AB
+        # mean_field_fractions = [0., 0.25, 0.5, 0.75, 1.-1.e-3]
+        mean_field_fractions = [mff]
+        fs = np.linspace(1.0e-6, 0.5, 6)
+        models = [model1, model2]
+        models = [model2]
+        #  fs = [0.5]
+
+        temperatures = np.linspace(0.10, 0.01, 101)
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
+
+        ax[0].imshow(img1, extent=[0.6 / 2.0, 1.2 / 2.0, 0.0, 0.6 * 4.0 * R], aspect="auto")
+        ax[1].imshow(img3, extent=[1.5 / 4.0, 2.5 / 4.0, -8.0, -7.0], aspect="auto")
+        ax[3].imshow(
+            img2, extent=[0.6 / 2.0, 1.4 / 2.0, -4.25 * 2.0, -3 * 2.0], aspect="auto"
+        )
+
+        for b, model in enumerate(models):
+
+            m = 1.0
+            ls = "--"
+
+            if model == model2:
+                m = 2.0
+                ls = "-"
+
+            c = -1
+            for f in fs:
+                model.mu_guess = np.array([0.0] * 5)
+
+                for d, mean_field_fraction in enumerate(mean_field_fractions):
+                    print(d)
+                    #  mean_field_fraction = 0.22 * 4 * f * (1. - f)
+                    c += 1
+                    print(
+                        f"LRO fraction: {np.abs(2.*f - 1.)}, mean field fraction: {mean_field_fraction}"
+                    )
+                    site_fractions = np.array(
+                        [f, 1.0 - f, 1.0 - f, f, f, 1.0 - f, 1.0 - f, f]
+                    )
+
+                    reduced_independent_cluster_fractions = (
+                        model.independent_cluster_fractions(site_fractions)
+                    )
+
+                    entropies = np.empty_like(temperatures)
+                    energies = np.empty_like(temperatures)
+
+                    for i, T in enumerate(temperatures):
+                        print(i, T)
+                        mu_independent_clusters = model.mu(
+                            T, reduced_independent_cluster_fractions, mean_field_fraction
+                        )
+
+                        E_clusters = effective_cluster_energies(
+                            model,
+                            reduced_independent_cluster_fractions,
+                            mean_field_fraction,
+                        )
+
+                        p = cluster_probabilities(
+                            mu_independent_clusters,
+                            T,
+                            E_clusters,
+                            model.clusters_as_independent_cluster_fractions,
+                        )
+
+                        if np.abs(sum(p) - 1) > 1.0e-6:
+                            print(
+                                f"{sum(p)}, {model.name}, c={f}, mff={mean_field_fraction}, T={T}"
+                            )
+                            entropies[i] = np.nan
+                            energies[i] = np.nan
+                        else:
+                            entropies[i] = -R * np.sum(p * np.log(p))
+                            energies[i] = p.dot(E_clusters)
+
+                    ax[0].plot(R * temperatures, entropies / m, c=colour[c], linestyle=ls)
+                    ax[1].plot(R * temperatures, energies / m, c=colour[c], linestyle=ls)
+                    ax[2].plot(
+                        R * temperatures,
+                        np.gradient(energies, entropies, edge_order=2) - temperatures,
+                        c=colour[c],
+                        linestyle=ls,
+                        label=f"{model.name}, c:{f}, f(mean):{mean_field_fraction}",
+                    )
+                    ax[3].plot(
+                        R * temperatures,
+                        (energies - temperatures * entropies) / m,
+                        c=colour[c],
+                        linestyle=ls,
+                    )
+
+            # Calculate equilibrated properties
+            temperatures = np.linspace(0.1, 0.01, 101)
+            entropies = np.empty_like(temperatures)
+            energies = np.empty_like(temperatures)
+            orders = np.empty_like(temperatures)
+            p_clusters = np.empty((len(temperatures), 256))
             for d, mean_field_fraction in enumerate(mean_field_fractions):
-                print(d)
-                #  mean_field_fraction = 0.22 * 4 * f * (1. - f)
-                c += 1
-                print(
-                    f"LRO fraction: {np.abs(2.*f - 1.)}, mean field fraction: {mean_field_fraction}"
-                )
-                site_fractions = np.array(
-                    [f, 1.0 - f, 1.0 - f, f, f, 1.0 - f, 1.0 - f, f]
-                )
-
-                reduced_independent_cluster_fractions = (
-                    model.independent_cluster_fractions(site_fractions)
-                )
-
-                entropies = np.empty_like(temperatures)
-                energies = np.empty_like(temperatures)
-
+                model.mu_guess = np.array([0.0] * 5)
                 for i, T in enumerate(temperatures):
                     print(i, T)
-                    mu_independent_clusters = model.mu(
-                        T, reduced_independent_cluster_fractions, mean_field_fraction
+                    sol = energy_entropy_order_equilibrated_at_CT(
+                        0.5, T, mean_field_fraction, model
                     )
-
-                    E_clusters = effective_cluster_energies(
-                        model,
-                        reduced_independent_cluster_fractions,
-                        mean_field_fraction,
-                    )
-
-                    p = cluster_probabilities(
-                        mu_independent_clusters,
-                        T,
-                        E_clusters,
-                        model.clusters_as_independent_cluster_fractions,
-                    )
-
-                    if np.abs(sum(p) - 1) > 1.0e-6:
-                        print(
-                            f"{sum(p)}, {model.name}, c={f}, mff={mean_field_fraction}, T={T}"
-                        )
-                        entropies[i] = np.nan
-                        energies[i] = np.nan
+                    if sol[3].success or sol[3].status == 2:
+                        energies[i] = sol[0]
+                        entropies[i] = sol[1]
+                        orders[i] = sol[2]
+                        p_clusters[i] = sol[4]
                     else:
-                        entropies[i] = -R * np.sum(p * np.log(p))
-                        energies[i] = p.dot(E_clusters)
+                        energies[i] = np.nan
+                        entropies[i] = np.nan
+                        orders[i] = np.nan
+                        p_clusters[i] = np.nan
 
-                ax[0].plot(R * temperatures, entropies / m, c=colour[c], linestyle=ls)
-                ax[1].plot(R * temperatures, energies / m, c=colour[c], linestyle=ls)
-                ax[2].plot(
-                    R * temperatures,
-                    np.gradient(energies, entropies, edge_order=2) - temperatures,
-                    c=colour[c],
-                    linestyle=ls,
-                    label=f"{model.name}, c:{f}, f(mean):{mean_field_fraction}",
-                )
+                ax[0].plot(R * temperatures, entropies / m, c="black")
+                ax[1].plot(R * temperatures, energies / m, c="black")
+                ax[3].plot(R * temperatures, energies / m, c="black")
                 ax[3].plot(
-                    R * temperatures,
-                    (energies - temperatures * entropies) / m,
-                    c=colour[c],
-                    linestyle=ls,
+                    R * temperatures, (energies - temperatures * entropies) / m, c="black"
                 )
+                ax[3].plot(R * temperatures, -6.0 - temperatures * entropies / m, c="black")
+
+        ax[0].set_ylim(
+            0,
+        )
+
+        custom_handles = [
+            Line2D(
+                [],
+                [],
+                marker="d",
+                color="black",
+                linestyle="None",
+                markersize=8,
+                label="MC",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="^",
+                markerfacecolor="none",
+                color="black",
+                linestyle="None",
+                markersize=8,
+                label="CVM",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="x",
+                color="black",
+                linestyle="None",
+                markersize=8,
+                label="CSA, $\\gamma = 1$",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="o",
+                markerfacecolor="none",
+                markeredgecolor="black",
+                linestyle="None",
+                markersize=8,
+                label="CSA, $\\gamma = 1.22$",
+            ),
+        ]
+
+        # Add the legend
+        handles, labels = ax[0].get_legend_handles_labels()
+        all_handles = custom_handles + handles
+        all_labels = [h.get_label() for h in custom_handles] + labels
+
+        ax[0].legend(all_handles, all_labels, frameon=True, fontsize=8)
+
+        ax[0].set_ylabel("Entropies")
+        ax[1].set_ylabel("Energies")
+        ax[2].set_ylabel("dEdS - T")
+        ax[3].set_ylabel("Helmholtz")
+
+        ax[2].legend()
+
+        plt.show()
+
+    if True:
+        # Disordered at 0.75
+        mff = 0.25  # 0.25 works well for A3B
+        temperatures = np.linspace(0.1, 0.01, 101)
+
+        mean_field_fraction = mff
+        model = model2
+        m = 2.0
+
+        f = 0.75
+        site_fractions_disordered = np.array(
+            [f, 1.0 - f, f, 1.0 - f, f, 1.0 - f, f, 1.0 - f]
+        )
+        site_fractions_ordered = np.array([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0])
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
+
+        ax[1].imshow(img4, extent=[1.5 / 4.0, 2.5 / 4.0, -6.0, -5.0], aspect="auto")
+
+        fs = np.linspace(1.0, 1.0e-6, 6)
+        for f in fs:
+            model.mu_guess = np.zeros(5) - 10.0
+            site_fractions = site_fractions_disordered * f + site_fractions_ordered * (
+                1.0 - f
+            )
+
+            reduced_independent_cluster_fractions = model.independent_cluster_fractions(
+                site_fractions
+            )
+
+            entropies = np.empty_like(temperatures)
+            energies = np.empty_like(temperatures)
+
+            for i, T in enumerate(temperatures):
+                mu_independent_clusters = model.mu(
+                    T, reduced_independent_cluster_fractions, mean_field_fraction
+                )
+
+                E_clusters = effective_cluster_energies(
+                    model,
+                    reduced_independent_cluster_fractions,
+                    mean_field_fraction,
+                )
+
+                p = cluster_probabilities(
+                    mu_independent_clusters,
+                    T,
+                    E_clusters,
+                    model.clusters_as_independent_cluster_fractions,
+                )
+
+                if np.abs(sum(p) - 1) > 1.0e-6:
+                    print(
+                        f"{sum(p)}, {model.name}, c={f}, mff={mean_field_fraction}, T={T}"
+                    )
+                    entropies[i] = np.nan
+                    energies[i] = np.nan
+                else:
+                    entropies[i] = -R * np.sum(p * np.log(p))
+                    energies[i] = p.dot(E_clusters)
+
+            ax[0].plot(R * temperatures, (entropies) / m)
+            ax[1].plot(R * temperatures, energies / m)
+            ax[2].plot(R * temperatures, (energies - temperatures * (entropies)) / m)
 
         # Calculate equilibrated properties
-        temperatures = np.linspace(0.1, 0.01, 101)
+        temperatures = np.linspace(0.1, 0.01, 201)
         entropies = np.empty_like(temperatures)
         energies = np.empty_like(temperatures)
         orders = np.empty_like(temperatures)
-        for d, mean_field_fraction in enumerate(mean_field_fractions):
-            model.mu_guess = np.array([0.0] * 5)
-            for i, T in enumerate(temperatures):
-                print(i, T)
-                sol = energy_entropy_order_equilibrated_at_CT(
-                    0.5, T, mean_field_fraction, model
-                )
-                if sol[3].success or sol[3].status == 2:
-                    energies[i] = sol[0]
-                    entropies[i] = sol[1]
-                    orders[i] = sol[2]
-                else:
-                    energies[i] = np.nan
-                    entropies[i] = np.nan
-                    orders[i] = np.nan
+        p_clusters = np.empty((len(temperatures), 256))
 
-            ax[0].plot(R * temperatures, entropies / m, c="black")
-            ax[1].plot(R * temperatures, energies / m, c="black")
-            ax[3].plot(R * temperatures, energies / m, c="black")
-            ax[3].plot(
-                R * temperatures, (energies - temperatures * entropies) / m, c="black"
-            )
-            ax[3].plot(R * temperatures, -6.0 - temperatures * entropies / m, c="black")
-
-    ax[0].set_ylim(
-        0,
-    )
-
-    custom_handles = [
-        Line2D(
-            [],
-            [],
-            marker="d",
-            color="black",
-            linestyle="None",
-            markersize=8,
-            label="MC",
-        ),
-        Line2D(
-            [],
-            [],
-            marker="^",
-            markerfacecolor="none",
-            color="black",
-            linestyle="None",
-            markersize=8,
-            label="CVM",
-        ),
-        Line2D(
-            [],
-            [],
-            marker="x",
-            color="black",
-            linestyle="None",
-            markersize=8,
-            label="CSA, $\\gamma = 1$",
-        ),
-        Line2D(
-            [],
-            [],
-            marker="o",
-            markerfacecolor="none",
-            markeredgecolor="black",
-            linestyle="None",
-            markersize=8,
-            label="CSA, $\\gamma = 1.22$",
-        ),
-    ]
-
-    # Add the legend
-    handles, labels = ax[0].get_legend_handles_labels()
-    all_handles = custom_handles + handles
-    all_labels = [h.get_label() for h in custom_handles] + labels
-
-    ax[0].legend(all_handles, all_labels, frameon=True, fontsize=8)
-
-    ax[0].set_ylabel("Entropies")
-    ax[1].set_ylabel("Energies")
-    ax[2].set_ylabel("dEdS - T")
-    ax[3].set_ylabel("Helmholtz")
-
-    ax[2].legend()
-
-    plt.show()
-
-if True:
-    # Disordered at 0.75
-    mff = 0.25  # 0.25 works well for A3B
-    temperatures = np.linspace(0.1, 0.01, 101)
-
-    mean_field_fraction = mff
-    model = model2
-    m = 2.0
-
-    f = 0.75
-    site_fractions_disordered = np.array(
-        [f, 1.0 - f, f, 1.0 - f, f, 1.0 - f, f, 1.0 - f]
-    )
-    site_fractions_ordered = np.array([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0])
-
-    fig = plt.figure(figsize=(10, 8))
-    ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
-
-    ax[1].imshow(img4, extent=[1.5 / 4.0, 2.5 / 4.0, -6.0, -5.0], aspect="auto")
-
-    fs = np.linspace(1.0, 1.0e-6, 6)
-    for f in fs:
-        model.mu_guess = np.zeros(5) - 10.0
-        site_fractions = site_fractions_disordered * f + site_fractions_ordered * (
-            1.0 - f
-        )
-
-        reduced_independent_cluster_fractions = model.independent_cluster_fractions(
-            site_fractions
-        )
-
-        entropies = np.empty_like(temperatures)
-        energies = np.empty_like(temperatures)
-
+        model.mu_guess = np.array([0.0] * 5)
         for i, T in enumerate(temperatures):
-            mu_independent_clusters = model.mu(
-                T, reduced_independent_cluster_fractions, mean_field_fraction
-            )
-
-            E_clusters = effective_cluster_energies(
-                model,
-                reduced_independent_cluster_fractions,
-                mean_field_fraction,
-            )
-
-            p = cluster_probabilities(
-                mu_independent_clusters,
-                T,
-                E_clusters,
-                model.clusters_as_independent_cluster_fractions,
-            )
-
-            if np.abs(sum(p) - 1) > 1.0e-6:
-                print(
-                    f"{sum(p)}, {model.name}, c={f}, mff={mean_field_fraction}, T={T}"
-                )
-                entropies[i] = np.nan
-                energies[i] = np.nan
-            else:
-                entropies[i] = -R * np.sum(p * np.log(p))
-                energies[i] = p.dot(E_clusters)
-
-        ax[0].plot(R * temperatures, (entropies) / m)
-        ax[1].plot(R * temperatures, energies / m)
-        ax[2].plot(R * temperatures, (energies - temperatures * (entropies)) / m)
-
-    # Calculate equilibrated properties
-    temperatures = np.linspace(0.1, 0.01, 201)
-    entropies = np.empty_like(temperatures)
-    energies = np.empty_like(temperatures)
-    orders = np.empty_like(temperatures)
-
-    model.mu_guess = np.array([0.0] * 5)
-    for i, T in enumerate(temperatures):
-        print(i, T)
-        sol = energy_entropy_order_equilibrated_at_CT(
-            0.25, T, mean_field_fraction, model
-        )
-        if sol[3].success or sol[3].status == 2:
-            energies[i] = sol[0]
-            entropies[i] = sol[1]
-            orders[i] = sol[2]
-        else:
-            energies[i] = np.nan
-            entropies[i] = np.nan
-            orders[i] = np.nan
-    ax[0].plot(R * temperatures, entropies / m, c="black")
-    ax[1].plot(R * temperatures, energies / m, c="black")
-    ax[2].plot(R * temperatures, (energies - temperatures * entropies) / m, c="black")
-
-    ax[0].plot(R * T_full_A3B, S_full_A3B, c="black", linestyle="--", linewidth=0.5)
-    ax[1].plot(R * T_full_A3B, H_full_A3B, c="black", linestyle="--", linewidth=0.5)
-    ax[2].plot(
-        R * T_full_A3B,
-        H_full_A3B - T_full_A3B * S_full_A3B,
-        c="black",
-        linestyle="--",
-        linewidth=0.5,
-    )
-
-    ax[0].plot(
-        R * temperatures,
-        temperatures * 0.0 - 4.0 * R * (0.75 * np.log(0.75) + 0.25 * np.log(0.25)),
-    )
-    ax[1].plot(R * temperatures, temperatures * 0.0 - 4.5)
-    plt.show()
-
-
-n_c = 199
-n_T = 199
-
-if False:
-    compositions = np.linspace(0.5, 0.005, n_c)
-    temperatures = np.linspace(0.1, 0.001, n_T)
-    mean_field_fraction = 0.25
-
-    energies = np.zeros((len(temperatures), len(compositions)))
-    entropies = np.zeros((len(temperatures), len(compositions)))
-    orders = np.zeros((len(temperatures), len(compositions)))
-
-    m = 2.0
-
-    for j, c in enumerate(compositions):
-        print(f"c: {c}")
-        E_max = -32.0 * c
-        model2.mu_guess = np.array([E_max] * 5)
-        for i, T in enumerate(temperatures):
-            mu_guess = model2.mu_guess
+            print(i, T)
             sol = energy_entropy_order_equilibrated_at_CT(
-                c, T, mean_field_fraction, model2
+                0.25, T, mean_field_fraction, model
             )
+            if sol[3].success or sol[3].status == 2:
+                energies[i] = sol[0]
+                entropies[i] = sol[1]
+                orders[i] = sol[2]
+                p_clusters[i] = sol[4]
+            else:
+                energies[i] = np.nan
+                entropies[i] = np.nan
+                orders[i] = np.nan
+                p_clusters[i] = np.nan
+        ax[0].plot(R * temperatures, entropies / m, c="black")
+        ax[1].plot(R * temperatures, energies / m, c="black")
+        ax[2].plot(R * temperatures, (energies - temperatures * entropies) / m, c="black")
 
-            if sol[3].success is False:
-                model2.mu_guess = np.array([-16] * 5)
+        ax[0].plot(R * T_full_A3B, S_full_A3B, c="black", linestyle="--", linewidth=0.5)
+        ax[1].plot(R * T_full_A3B, H_full_A3B, c="black", linestyle="--", linewidth=0.5)
+        ax[2].plot(
+            R * T_full_A3B,
+            H_full_A3B - T_full_A3B * S_full_A3B,
+            c="black",
+            linestyle="--",
+            linewidth=0.5,
+        )
+
+        ax[0].plot(
+            R * temperatures,
+            temperatures * 0.0 - 4.0 * R * (0.75 * np.log(0.75) + 0.25 * np.log(0.25)),
+        )
+        ax[1].plot(R * temperatures, temperatures * 0.0 - 4.5)
+        plt.show()
+
+
+    n_c = 199
+    n_T = 199
+
+    if True:
+        compositions = np.linspace(0.5, 0.005, n_c)
+        temperatures = np.linspace(0.1, 0.001, n_T)
+        mean_field_fraction = 0.25
+
+        energies = np.zeros((len(temperatures), len(compositions)))
+        entropies = np.zeros((len(temperatures), len(compositions)))
+        orders = np.zeros((len(temperatures), len(compositions)))
+        p_clusters = np.empty((len(temperatures), len(compositions), 256))
+
+        m = 2.0
+
+        for j, c in enumerate(compositions):
+            print(f"c: {c}")
+            E_max = -32.0 * c
+            model2.mu_guess = np.array([E_max] * 5)
+            for i, T in enumerate(temperatures):
+                mu_guess = model2.mu_guess
                 sol = energy_entropy_order_equilibrated_at_CT(
                     c, T, mean_field_fraction, model2
                 )
 
-            if sol[3].success or sol[3].status == 2:
-                energies[i, j] = sol[0]
-                entropies[i, j] = sol[1]
-                orders[i, j] = sol[2]
-            else:
-                print(sol)
-                energies[i, j] = np.nan
-                entropies[i, j] = np.nan
-                orders[i, j] = np.nan
-                model2.mu_guess = mu_guess
+                if sol[3].success is False:
+                    model2.mu_guess = np.array([-16] * 5)
+                    sol = energy_entropy_order_equilibrated_at_CT(
+                        c, T, mean_field_fraction, model2
+                    )
 
-            if entropies[i, j] == np.nan:
-                print(T, energies[i, j], entropies[i, j], orders[i, j])
+                if sol[3].success or sol[3].status == 2:
+                    energies[i, j] = sol[0]
+                    entropies[i, j] = sol[1]
+                    orders[i, j] = sol[2]
+                    p_clusters[i, j] = sol[4]
+                else:
+                    print(sol)
+                    energies[i, j] = np.nan
+                    entropies[i, j] = np.nan
+                    orders[i, j] = np.nan
+                    p_clusters[i, j] = np.nan
+                    model2.mu_guess = mu_guess
 
-    cc, tt = np.meshgrid(compositions, temperatures)
+                if entropies[i, j] == np.nan:
+                    print(T, energies[i, j], entropies[i, j], orders[i, j])
 
-    cc = cc.flatten()
-    tt = tt.flatten()
-    ee = energies.flatten()
-    ss = entropies.flatten()
-    oo = orders.flatten()
-    np.savetxt("output/XTESO.dat", np.array([cc, tt, ee, ss, oo]).T)
+        cc, tt = np.meshgrid(compositions, temperatures)
 
-if False:
-    cc, tt, ee, ss, oo = np.loadtxt("output/XTESO.dat", unpack=True)
+        cc = cc.flatten()
+        tt = tt.flatten()
+        ee = energies.flatten()
+        ss = entropies.flatten()
+        oo = orders.flatten()
+        np.savetxt("output/XTESO.dat", np.array([cc, tt, ee, ss, oo]).T)
 
-    # note need to fix when rerun
-    Tclip = -12
-    cc = cc.reshape(n_T, n_c)[:Tclip]
-    tt = tt.reshape(n_T, n_c)[:Tclip]
+    if True:
+        cc, tt, ee, ss, oo = np.loadtxt("output/XTESO.dat", unpack=True)
+
+        # note need to fix when rerun
+        Tclip = -12
+        cc = cc.reshape(n_T, n_c)[:Tclip]
+        tt = tt.reshape(n_T, n_c)[:Tclip]
+
+        compositions = cc[0, :]
+        temperatures = tt[:, 0]
+
+        energies = ee.reshape(n_T, n_c)[:Tclip]
+        entropies = ss.reshape(n_T, n_c)[:Tclip]
+        orders = oo.reshape(n_T, n_c)[:Tclip]
+
+        entropies[(orders < 0.001)] = np.nan
+        energies[(orders < 0.01)] = np.nan
+        orders[(orders < 0.01)] = np.nan
+
+        mean_field_fraction = 0.25
+
+        model2.mu_guess = np.array([0.0, -12.0, -12.0, -12.0, -12.0])
+        for (j, i), entropy in np.ndenumerate(entropies.T):
+            if np.isnan(entropy):
+                print(i, j)
+                F = helmholtz_at_OCT(
+                    [orders[i, j]], cc[i, j], tt[i, j], mean_field_fraction, model2
+                )
+                S = -(F - energies[i, j]) / tt[i, j]
+                E, S, O, sol, p = energy_entropy_order_equilibrated_at_CT(
+                    cc[i, j], tt[i, j], mean_field_fraction, model2
+                )
+
+                if S < 50.0 and S > 0:
+                    print(model2.mu_guess)
+                    energies[i, j] = E
+                    entropies[i, j] = S
+                    orders[i, j] = O
+                    p_clusters[i, j] = p
+
+                else:
+                    model2.mu_guess = np.array([0.0, -12.0, -12.0, -12.0, -12.0])
+        for (i, j), entropy in np.ndenumerate(entropies):
+            if np.isnan(entropy):
+                print(i, j)
+                F = helmholtz_at_OCT(
+                    [orders[i, j]], cc[i, j], tt[i, j], mean_field_fraction, model2
+                )
+                S = -(F - energies[i, j]) / tt[i, j]
+                E, S, _, sol, p = energy_entropy_order_equilibrated_at_CT(
+                    cc[i, j], tt[i, j], mean_field_fraction, model2
+                )
+
+                if S < 50.0 and S > 0:
+                    print(model2.mu_guess)
+                    energies[i, j] = E
+                    entropies[i, j] = S
+                    orders[i, j] = O
+                    p_clusters[i, j] = p
+                else:
+                    model2.mu_guess = np.array([0.0, -12.0, -12.0, -12.0, -12.0])
+
+        # Only infill as a last resort
+        entropies = fill_nans_inpaint(entropies)
+        energies = fill_nans_inpaint(energies)
+        orders = fill_nans_inpaint(orders)
+
+        cc = cc.flatten()
+        tt = tt.flatten()
+        ee = energies.flatten()
+        ss = entropies.flatten()
+        oo = orders.flatten()
+        np.savetxt("output/XTESO_new.dat", np.array([cc, tt, ee, ss, oo]).T)
+
+    cc, tt, ee, ss, oo = np.loadtxt("output/XTESO_new.dat", unpack=True)
+
+    n_T = n_T - 12
+    cc = cc.reshape(n_T, n_c)
+    tt = tt.reshape(n_T, n_c)
 
     compositions = cc[0, :]
     temperatures = tt[:, 0]
 
-    energies = ee.reshape(n_T, n_c)[:Tclip]
-    entropies = ss.reshape(n_T, n_c)[:Tclip]
-    orders = oo.reshape(n_T, n_c)[:Tclip]
+    energies = ee.reshape(n_T, n_c)
+    entropies = ss.reshape(n_T, n_c)
+    orders = oo.reshape(n_T, n_c)
 
-    entropies[(orders < 0.001)] = np.nan
-    energies[(orders < 0.01)] = np.nan
-    orders[(orders < 0.01)] = np.nan
+    helmholtz = energies - tt * entropies
 
+    m = 2.0
     mean_field_fraction = 0.25
 
-    model2.mu_guess = np.array([0.0, -12.0, -12.0, -12.0, -12.0])
-    for (j, i), entropy in np.ndenumerate(entropies.T):
-        if np.isnan(entropy):
-            print(i, j)
-            F = helmholtz_at_OCT(
-                [orders[i, j]], cc[i, j], tt[i, j], mean_field_fraction, model2
-            )
-            S = -(F - energies[i, j]) / tt[i, j]
-            E, S, O, sol = energy_entropy_order_equilibrated_at_CT(
-                cc[i, j], tt[i, j], mean_field_fraction, model2
-            )
-
-            if S < 50.0 and S > 0:
-                print(model2.mu_guess)
-                energies[i, j] = E
-                entropies[i, j] = S
-                orders[i, j] = O
-            else:
-                model2.mu_guess = np.array([0.0, -12.0, -12.0, -12.0, -12.0])
-    for (i, j), entropy in np.ndenumerate(entropies):
-        if np.isnan(entropy):
-            print(i, j)
-            F = helmholtz_at_OCT(
-                [orders[i, j]], cc[i, j], tt[i, j], mean_field_fraction, model2
-            )
-            S = -(F - energies[i, j]) / tt[i, j]
-            E, S, _, sol = energy_entropy_order_equilibrated_at_CT(
-                cc[i, j], tt[i, j], mean_field_fraction, model2
-            )
-
-            if S < 50.0 and S > 0:
-                print(model2.mu_guess)
-                energies[i, j] = E
-                entropies[i, j] = S
-                orders[i, j] = O
-            else:
-                model2.mu_guess = np.array([0.0, -12.0, -12.0, -12.0, -12.0])
-
-    # Only infill as a last resort
-    entropies = fill_nans_inpaint(entropies)
-    energies = fill_nans_inpaint(energies)
-    orders = fill_nans_inpaint(orders)
-
-    cc = cc.flatten()
-    tt = tt.flatten()
-    ee = energies.flatten()
-    ss = entropies.flatten()
-    oo = orders.flatten()
-    np.savetxt("output/XTESO_new.dat", np.array([cc, tt, ee, ss, oo]).T)
-
-cc, tt, ee, ss, oo = np.loadtxt("output/XTESO_new.dat", unpack=True)
-
-n_T = n_T - 12
-cc = cc.reshape(n_T, n_c)
-tt = tt.reshape(n_T, n_c)
-
-compositions = cc[0, :]
-temperatures = tt[:, 0]
-
-energies = ee.reshape(n_T, n_c)
-entropies = ss.reshape(n_T, n_c)
-orders = oo.reshape(n_T, n_c)
-
-helmholtz = energies - tt * entropies
-
-m = 2.0
-mean_field_fraction = 0.25
-
-if False:
-    # Interpolation (this method does not work)
-    interpz = RegularGridInterpolator(
-        (temperatures, compositions), entropies, method="linear"
-    )
-    interpc = RegularGridInterpolator(
-        (temperatures, compositions), orders, method="linear"
-    )
-
-    xnew = np.linspace(compositions.min(), compositions.max(), 100)
-    ynew = np.linspace(temperatures.min(), temperatures.max(), 100)
-    xxnew, yynew = np.meshgrid(xnew, ynew)
-    points = np.stack((yynew.ravel(), xxnew.ravel()), axis=-1)
-    zznew = interpz(points).reshape(100, 100)
-    ccnew = interpc(points).reshape(100, 100)
-else:
-    zznew = entropies
-    xxnew = tt
-    yynew = cc
-    ccnew = orders
-
-# 3D figure
-fig = go.Figure(
-    data=[
-        go.Surface(
-            z=zznew,
-            x=xxnew,
-            y=yynew,
-            surfacecolor=ccnew,
-            colorscale="Viridis",
-            colorbar=dict(title="disorder"),
+    if False:
+        # Interpolation (this method does not work)
+        interpz = RegularGridInterpolator(
+            (temperatures, compositions), entropies, method="linear"
         )
-    ]
-)
-fig.show()
-
-
-# 2D figures
-fig = plt.figure(figsize=(10, 8))
-ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
-
-
-cmap = cm.rainbow
-
-labels = ["long range order", "Entropy/R", "Energy", "Helmholtz"]
-properties = [1.0 - orders, entropies / R, energies, helmholtz]
-for i, c in enumerate(properties):
-    norm = mcolors.Normalize(vmin=c.min(), vmax=c.max())
-    surf = ax[i].contourf(cc, 4.0 * R * tt, c, cmap=cmap, levels=51)
-    surf = ax[i].contourf(1.0 - cc, 4.0 * R * tt, c, cmap=cmap, levels=51)
-    cbar = fig.colorbar(surf, ax=ax[i], label=labels[i])
-
-    if i == 0:
-        levels = [0.0000001, 0.3, 0.6, 0.8, 0.9, 0.95]
-        for level in levels:
-            contour = ax[i].contour(cc, tt, c, levels=[level])
-
-            # Extract contour paths
-            contour_paths = []
-            for collection in contour.collections:
-                for path in collection.get_paths():
-                    coords = path.vertices  # Nx2 array of (x, y)
-                    contour_paths.append(coords)
-
-            coords = np.vstack(contour_paths)
-
-            for collection in contour.collections:
-                collection.remove()
-
-            coords_reflected = coords.copy()
-            coords_reflected[:, 0] = 1.0 - coords[:, 0]
-            coords_reflected = coords_reflected[::-1]
-            coords = np.vstack([coords, coords_reflected])
-
-            # Use only unique coords
-            _, unique_indices = np.unique(coords, axis=0, return_index=True)
-            x = coords[unique_indices, 0]
-            y = coords[unique_indices, 1]
-
-            # Fit parametric spline (s is smoothing factor)
-            tck, u = splprep([x, y], s=0.00002)
-
-            # Evaluate the spline at a finer set of points
-            u_fine = np.linspace(0, 1, 500)
-            x_smooth, T_smooth = splev(u_fine, tck)
-
-            # Plot smoothed contour on all plots
-            for j in range(4):
-                ax[j].plot(
-                    x_smooth,
-                    4.0 * R * T_smooth,
-                    c="black",
-                    linewidth=1.0,
-                    linestyle="-",
-                )
-
-        ticks = np.linspace(0.0, 1.0, 6)
-        new_labels = [f"{tick:.2f}" for tick in ticks]
-        cbar.set_ticks(ticks)
-        cbar.set_ticklabels(new_labels)
-        cbar.ax.hlines(
-            levels,
-            xmin=0,
-            xmax=1,
-            colors="black",
-            linewidth=1,
-            transform=cbar.ax.transAxes,
+        interpc = RegularGridInterpolator(
+            (temperatures, compositions), orders, method="linear"
         )
 
-    for j in range(4):
-        ax[j].set_ylim(4.0 * R * temperatures.min(), 4.0 * R * temperatures.max())
-        ax[j].set_xlim(0.0, 1.0)
+        xnew = np.linspace(compositions.min(), compositions.max(), 100)
+        ynew = np.linspace(temperatures.min(), temperatures.max(), 100)
+        xxnew, yynew = np.meshgrid(xnew, ynew)
+        points = np.stack((yynew.ravel(), xxnew.ravel()), axis=-1)
+        zznew = interpz(points).reshape(100, 100)
+        ccnew = interpc(points).reshape(100, 100)
+    else:
+        zznew = entropies[:, ::-1]
+        xxnew = tt[:, ::-1]
+        yynew = cc[:, ::-1]
+        ccnew = orders[:, ::-1]
 
-if True:
-    img = mpimg.imread("figures/Binder_et_al_1981_Figure_5.png")
+    xxnew = np.concatenate((xxnew[:, :-1], xxnew[:, ::-1]), axis=1)
+    yynew = np.concatenate((yynew[:, :-1], 1. - yynew[:, ::-1]), axis=1)
+    zznew = np.concatenate((zznew[:, :-1], zznew[:, ::-1]), axis=1)
+    ccnew = np.concatenate((ccnew[:, :-1], ccnew[:, ::-1]), axis=1)
 
+    # 3D figure
+    fig = go.Figure(
+        data=[
+            go.Surface(
+                z=zznew,
+                x=xxnew,
+                y=yynew,
+                surfacecolor=ccnew,
+                colorscale="turbo",
+                colorbar=dict(title="disorder"),
+            )
+        ]
+    )
+
+    fig.update_layout(
+        width=1400,  # Twice as wide
+        height=1000,  # Standard height
+        scene=dict(
+            xaxis_title='Temperature',
+            yaxis_title='Composition',
+            zaxis_title='Entropy',
+            aspectratio=dict(x=1, y=2, z=1)
+        )
+    )
+
+    fig.show()
+
+
+    # 2D figures
+    fig = plt.figure(figsize=(10, 8))
+    ax = [fig.add_subplot(2, 2, i) for i in range(1, 5)]
+
+
+    cmap = cm.rainbow
+
+    labels = ["long range order", "Entropy/R", "Energy", "Helmholtz"]
+    properties = [1.0 - orders, entropies / R, energies, helmholtz]
+    for i, c in enumerate(properties):
+        norm = mcolors.Normalize(vmin=c.min(), vmax=c.max())
+        surf = ax[i].contourf(cc, 4.0 * R * tt, c, cmap=cmap, levels=51)
+        surf = ax[i].contourf(1.0 - cc, 4.0 * R * tt, c, cmap=cmap, levels=51)
+        cbar = fig.colorbar(surf, ax=ax[i], label=labels[i])
+
+        if i == 0:
+            levels = [0.0000001, 0.3, 0.6, 0.8, 0.9, 0.95]
+            for level in levels:
+                contour = ax[i].contour(cc, tt, c, levels=[level])
+
+                # Extract contour paths
+                contour_paths = []
+                for collection in contour.collections:
+                    for path in collection.get_paths():
+                        coords = path.vertices  # Nx2 array of (x, y)
+                        contour_paths.append(coords)
+
+                coords = np.vstack(contour_paths)
+
+                for collection in contour.collections:
+                    collection.remove()
+
+                coords_reflected = coords.copy()
+                coords_reflected[:, 0] = 1.0 - coords[:, 0]
+                coords_reflected = coords_reflected[::-1]
+                coords = np.vstack([coords, coords_reflected])
+
+                # Use only unique coords
+                _, unique_indices = np.unique(coords, axis=0, return_index=True)
+                x = coords[unique_indices, 0]
+                y = coords[unique_indices, 1]
+
+                # Fit parametric spline (s is smoothing factor)
+                tck, u = splprep([x, y], s=0.00002)
+
+                # Evaluate the spline at a finer set of points
+                u_fine = np.linspace(0, 1, 500)
+                x_smooth, T_smooth = splev(u_fine, tck)
+
+                # Plot smoothed contour on all plots
+                for j in range(4):
+                    ax[j].plot(
+                        x_smooth,
+                        4.0 * R * T_smooth,
+                        c="black",
+                        linewidth=1.0,
+                        linestyle="-",
+                    )
+
+            ticks = np.linspace(0.0, 1.0, 6)
+            new_labels = [f"{tick:.2f}" for tick in ticks]
+            cbar.set_ticks(ticks)
+            cbar.set_ticklabels(new_labels)
+            cbar.ax.hlines(
+                levels,
+                xmin=0,
+                xmax=1,
+                colors="black",
+                linewidth=1,
+                transform=cbar.ax.transAxes,
+            )
+
+        for j in range(4):
+            ax[j].set_ylim(4.0 * R * temperatures.min(), 4.0 * R * temperatures.max())
+            ax[j].set_xlim(0.0, 1.0)
+
+    if True:
+        img = mpimg.imread("figures/Binder_et_al_1981_Figure_5.png")
+
+        ax[1].imshow(
+            make_transparent(img), extent=[0.0, 1.0, 0, 2], aspect="auto", zorder=10
+        )
+
+    img = mpimg.imread("figures/Ackermann_et_al_1986_Figure_25.png")
+
+    ax[1].imshow(make_transparent(img), extent=[0.8, 0.49, 0, 2], aspect="auto", zorder=20)
+
+
+    img = mpimg.imread("figures/Inden_2001_Figure_8-15.png")
     ax[1].imshow(
-        make_transparent(img), extent=[0.0, 1.0, 0, 2], aspect="auto", zorder=10
+        make_transparent(img), extent=[0.1, 0.9, 0, 2.56], aspect="auto", zorder=30
     )
 
-img = mpimg.imread("figures/Ackermann_et_al_1986_Figure_25.png")
 
-ax[1].imshow(make_transparent(img), extent=[0.8, 0.49, 0, 2], aspect="auto", zorder=20)
-
-
-img = mpimg.imread("figures/Inden_2001_Figure_8-15.png")
-ax[1].imshow(
-    make_transparent(img), extent=[0.1, 0.9, 0, 2.56], aspect="auto", zorder=30
-)
-
-
-fig.set_layout_engine("tight")
-plt.show()
+    fig.set_layout_engine("tight")
+    plt.show()
